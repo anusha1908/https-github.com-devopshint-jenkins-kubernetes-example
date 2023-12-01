@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+     environment {
+        registry = '224498103667.dkr.ecr.ap-south-1.amazonaws.com/ci-cd'
+    }
+   
+    stages {
+          stage('Checkout') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], userRemoteConfigs: [[url: 'https://github.com/anusha1908/https-github.com-devopshint-jenkins-kubernetes-example.git']]])
+            }
+        }
+           stage('Building image') {
+             steps{
+                  script {
+                   dockerImage = docker.build registry
+                   }
+                }
+            }
+    
+            stage('Pushing to ECR') {
+             steps{  
+                  script {
+               withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws']]) {
+                        sh 'aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 224498103667.dkr.ecr.ap-south-1.amazonaws.com'
+                        sh 'docker push 224498103667.dkr.ecr.ap-south-1.amazonaws.com/ci-cd:latest'
+						}
+					}
+				}
+			}		
+            
+            stage('Deploying to Kubernetes') {
+              steps{
+					sshagent(['k8s']) {
+					    sh "scp -o stringHostKeyChecking=no nodejsapp.yaml ubuntu@13.233.45.100:/home/ubuntu"
+					     script {
+						   try{
+							sh "ssh ubuntu@13.233.45.100 kubectl apply -f ."
+						}catch(error){
+							sh "sh ubuntu@13.233.45.100 kubectl create -f ."
+						   }
+    
+                        }
+					
+					
+                    }
+                }
+            }
+			
+		}
+    }
